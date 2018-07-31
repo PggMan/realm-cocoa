@@ -1,3 +1,19 @@
+x.x.x Release notes (yyyy-MM-dd)
+=============================================================
+
+### Breaking Changes
+
+* None.
+
+### Enhancements
+
+* Add support for limiting the number of objects matched by a query-based sync
+  subscription. This requires a server running ROS 3.10.1 or newer.
+
+### Bugfixes
+
+* None.
+
 3.8.0 Release notes (2018-09-05)
 =============================================================
 
