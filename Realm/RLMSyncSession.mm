@@ -80,9 +80,12 @@ using namespace realm;
 
 @interface RLMSyncSession ()
 @property (class, nonatomic, readonly) dispatch_queue_t notificationsQueue;
+@property (atomic, readwrite) RLMSyncConnectionState connectionState;
 @end
 
-@implementation RLMSyncSession
+@implementation RLMSyncSession {
+    uint64_t _sessionStateToken;
+}
 
 + (dispatch_queue_t)notificationsQueue {
     static dispatch_queue_t queue;
@@ -93,12 +96,30 @@ using namespace realm;
     return queue;
 }
 
-- (instancetype)initWithSyncSession:(std::shared_ptr<SyncSession>)session {
+static RLMSyncConnectionState convertConnectionState(SyncSession::ConnectionState state) {
+    switch (state) {
+        case SyncSession::ConnectionState::Disconnected: return RLMSyncConnectionStateDisconnected;
+        case SyncSession::ConnectionState::Connecting:   return RLMSyncConnectionStateConnecting;
+        case SyncSession::ConnectionState::Connected:    return RLMSyncConnectionStateConnected;
+    }
+}
+
+- (instancetype)initWithSyncSession:(std::shared_ptr<SyncSession> const&)session {
     if (self = [super init]) {
         _session = session;
+        _connectionState = convertConnectionState(session->connection_state());
+        _sessionStateToken = session->register_connection_change_callback([=](auto, auto newState) {
+            self.connectionState = convertConnectionState(newState);
+        });
         return self;
     }
     return nil;
+}
+
+- (void)dealloc {
+    if (auto session = _session.lock()) {
+        session->unregister_progress_notifier(_sessionStateToken);
+    }
 }
 
 - (RLMSyncConfiguration *)configuration {
@@ -132,6 +153,18 @@ using namespace realm;
         return RLMSyncSessionStateActive;
     }
     return RLMSyncSessionStateInvalid;
+}
+
+- (void)suspend {
+    if (auto session = _session.lock()) {
+        session->log_out();
+    }
+}
+
+- (void)resume {
+    if (auto session = _session.lock()) {
+        session->revive_if_needed();
+    }
 }
 
 - (BOOL)waitForUploadCompletionOnQueue:(dispatch_queue_t)queue callback:(void(^)(NSError *))callback {
